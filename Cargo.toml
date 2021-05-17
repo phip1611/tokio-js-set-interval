@@ -5,7 +5,7 @@ Allows you to use `setInterval(callback, ms)` and
 `setTimeout(callback, ms)` as in Javascript inside a `tokio` runtime.
 For this, it offers the macros `set_interval!(callback, ms)` and `set_timeout!(callback, ms)`.
 """
-version = "1.0.0"
+version = "1.0.1"
 edition = "2018"
 authors = ["Philipp Schuster <phip1611@gmail.com>"]
 keywords = ["tokio", "set-interval", "interval", "set-timeout", "timeout"]
