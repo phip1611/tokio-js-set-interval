@@ -268,7 +268,7 @@ mod tests {
         {
             let counter = counter.clone();
             // the block is required to change the return type to "()"
-            set_interval!(
+            set_timeout!(
                 move || {
                     counter.fetch_add(1, Ordering::SeqCst);
                 },
@@ -278,7 +278,7 @@ mod tests {
         {
             let counter = counter.clone();
             // the block is required to change the return type to "()"
-            set_interval!(
+            set_timeout!(
                 move || {
                     counter.fetch_add(1, Ordering::SeqCst);
                 },
