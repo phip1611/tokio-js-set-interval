@@ -136,9 +136,14 @@ macro_rules! set_timeout {
 /// for the `tokio` runtime. Unlike in Javascript, it will only be executed, if after the
 /// specified time passed, the `tokio` runtime still lives, i.e. didn't got dropped.
 ///
-/// As in Javascript, a timeout may only have side effects and no return type.
+/// As in Javascript, an interval may only have side effects and no return type.
 /// You don't get a handle to manually wait for it, you must ensure, that the tokio
 /// runtime lives long enough.
+///
+/// The interval is not stoppable (unless the application stops). Strictly speaking, there
+/// should be a way to clear an interval, similar to javascript. But because this library is
+/// mainly for educational reasons and for "low priority indefinetely running background tasks",
+/// this is not implemented yet. If you need it, create an issue or a PR.
 ///
 /// # Parameters
 /// * `#1` expression, closure-expression, block or identifier (which points to a closure).
