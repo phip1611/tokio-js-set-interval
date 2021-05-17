@@ -1,0 +1,25 @@
+[package]
+name = "tokio-js-set-interval"
+description = """
+Allows you to use `setInterval(callback, ms)` and
+`setTimeout(callback, ms)` as in Javascript inside a `tokio` runtime.
+For this, it offers the macros `set_interval!(callback, ms)` and `set_timeout!(callback, ms)`.
+"""
+version = "1.0.0"
+edition = "2018"
+authors = ["Philipp Schuster <phip1611@gmail.com>"]
+keywords = ["tokio", "set-interval", "interval", "set-timeout", "timeout"]
+categories = ["asynchronous"]
+readme = "README.md"
+license = "MIT"
+homepage = "https://github.com/phip1611/tokio-js-set-interval"
+repository = "https://github.com/phip1611/tokio-js-set-interval"
+documentation = "https://docs.rs/tokio-js-set-interval"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "1.6.0", features = ["time"] }
+
+[dev-dependencies]
+tokio = { version = "1.6.0", features = ["full"] }
