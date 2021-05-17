@@ -287,7 +287,7 @@ mod tests {
         }
 
         // give the tokio runtime enough execution time
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(110)).await;
         assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
 
@@ -306,7 +306,7 @@ mod tests {
         }
 
         // give the tokio runtime enough execution time to execute the interval 3 times
-        tokio::time::sleep(Duration::from_millis(151)).await;
+        tokio::time::sleep(Duration::from_millis(180)).await;
         assert_eq!(counter.load(Ordering::SeqCst), 3);
     }
 }
