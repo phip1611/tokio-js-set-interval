@@ -48,11 +48,3 @@ I over-engineered them a little to learn more about macros.
 Version 1.0.0 is developed with:
  * `tokio` @ 1.6.0 (but should also work with 1.0.0)
  * `rustc` @ 1.52.1 (but should also work with 1.45.2)
-
-
-## Changelog
-- Releases 1.0.1, 1.0.2, 1.0.3 (2021-05-17)
-  - README updates
-  - text fixes
-- Release 1.0.0 (2021-05-17)
-    - initial release
