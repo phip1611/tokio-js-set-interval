@@ -15,13 +15,16 @@ tokio-js-set-interval = "<latest-version>"
 **code.rs**
 ```rust
 use std::time::Duration;
-use tokio_js_set_interval::{set_interval, set_timeout};
+use tokio_js_set_interval::{set_interval, set_timeout, clear_interval};
 
 #[tokio::main]
 async fn main() {
     set_timeout!(println!("hello from timeout"), 25);
     set_interval!(println!("hello from interval"), 10);
-
+    // you can clear intervals if you want
+    let id = set_interval!(println!("hello from interval"), 10);
+    clear_interval(id);
+    
     // give enough time before tokios runtime exits
     tokio::time::sleep(Duration::from_millis(40)).await;
 }
