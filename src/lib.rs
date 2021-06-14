@@ -48,7 +48,11 @@ SOFTWARE.
 //!  * `tokio` @ 1.6.0 (but should also work with 1.0.0)
 //!  * `rustc` @ 1.52.1 (but should also work with 1.45.2)
 
+use std::collections::BTreeMap;
+use std::sync::atomic::AtomicU64;
+use lazy_static::lazy_static;
 use tokio::time::Duration;
+use std::sync::Mutex;
 
 /// **INTERNAL** Use macro [`set_timeout`] instead!
 ///
@@ -59,11 +63,30 @@ pub async fn _set_timeout(f: impl Fn(), ms: u64) {
     f();
 }
 
+pub struct IntervalManager {
+    pub counter: AtomicU64,
+    pub continue_map: Mutex<BTreeMap<u64, bool>>,
+}
+
+lazy_static! {
+    pub static ref INTERVAL_MANAGER: IntervalManager = IntervalManager {
+        counter: AtomicU64::new(0),
+        continue_map: Mutex::new(BTreeMap::new())
+    };
+}
+
+
 /// **INTERNAL** Use macro [`set_interval`] instead!
 ///
 /// Creates a future that glues the tokio interval function together with
 /// the provided callback.
-pub async fn _set_interval(f: impl Fn(), ms: u64) {
+pub async fn _set_interval(f: impl Fn(), ms: u64, id: u64) {
+    // own scope -> early drop lock
+    {
+        let mut map = INTERVAL_MANAGER.continue_map.lock().unwrap();
+        map.insert(id, true);
+    }
+
     let mut int = tokio::time::interval(Duration::from_millis(ms));
 
     // the first tick in tokios interval returns immediately. Because we want behaviour
@@ -76,6 +99,12 @@ pub async fn _set_interval(f: impl Fn(), ms: u64) {
     loop {
         int.tick().await;
         f();
+
+        // break if the interval property for the given id is set to "false"
+        let map = INTERVAL_MANAGER.continue_map.lock().unwrap();
+        if !map.get(&id).unwrap() {
+            break;
+        }
     }
 }
 
@@ -124,11 +153,11 @@ macro_rules! set_timeout {
     };
     // match for expr, like `set_timeout!(println!())`
     ($cb:expr, $ms:literal) => {
-        tokio::spawn($crate::_set_timeout(|| $cb, $ms));
+        $crate::set_timeout!(|| $cb, $ms);
     };
     // match for block
     ($cb:block, $ms:literal) => {
-        tokio::spawn($crate::_set_timeout(|| $cb, $ms));
+        $crate::set_timeout!(|| $cb, $ms);
     };
 }
 
@@ -168,32 +197,64 @@ macro_rules! set_timeout {
 macro_rules! set_interval {
     // match for identifier, i.e. a closure, that is behind a variable
     ($cb:ident, $ms:literal) => {
-        tokio::spawn($crate::_set_interval($cb, $ms));
+        let id = ($crate::INTERVAL_MANAGER).counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        tokio::spawn(
+            $crate::_set_interval(
+                $cb,
+                $ms,
+                id,
+            )
+        );
+        id
     };
     // match for direct closure expression
     (|| $cb:expr, $ms:literal) => {
-        tokio::spawn($crate::_set_interval(|| $cb, $ms));
+        let id = ($crate::INTERVAL_MANAGER).counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        tokio::spawn(
+            $crate::_set_interval(
+                || $cb,
+                $ms,
+                id,
+            )
+        );
+        id
     };
     // match for direct move closure expression
     (move || $cb:expr, $ms:literal) => {
-        tokio::spawn($crate::_set_interval(move || $cb, $ms));
+        let id = ($crate::INTERVAL_MANAGER).counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        tokio::spawn(
+            $crate::_set_interval(
+                move || $cb,
+                $ms,
+                id,
+            )
+        );
+        id
     };
     // match for expr, like `set_interval!(println!())`
     ($cb:expr, $ms:literal) => {
-        tokio::spawn($crate::_set_interval(|| $cb, $ms));
+        $crate::set_interval!(|| $cb, $ms);
     };
     // match for block
     ($cb:block, $ms:literal) => {
-        tokio::spawn($crate::_set_interval(|| $cb, $ms));
+        $crate::set_interval!(|| $cb, $ms);
     };
+}
+
+pub fn clear_interval(id: u64) {
+    let mut map = INTERVAL_MANAGER.continue_map.lock().unwrap();
+    match map.get_mut(&id) {
+        None => {}
+        Some(continue_interval) => {*continue_interval = false}
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::sync::Arc;
 
     #[test]
     fn it_works() {
@@ -307,6 +368,29 @@ mod tests {
 
         // give the tokio runtime enough execution time to execute the interval 3 times
         tokio::time::sleep(Duration::from_millis(180)).await;
+        assert_eq!(counter.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn test_clear_interval() {
+        let counter = Arc::new(AtomicU64::new(0));
+        let interval_id;
+        {
+            let counter = counter.clone();
+            // the block is required to change the return type to "()"
+            interval_id = set_interval!(
+                move || {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                },
+                50
+            );
+        }
+
+        // give the tokio runtime enough execution time to execute the interval 3 times
+        tokio::time::sleep(Duration::from_millis(180)).await;
+        assert_eq!(counter.load(Ordering::SeqCst), 3);
+        clear_interval(interval_id);
+        tokio::time::sleep(Duration::from_millis(200)).await;
         assert_eq!(counter.load(Ordering::SeqCst), 3);
     }
 }

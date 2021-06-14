@@ -20,6 +20,7 @@ documentation = "https://docs.rs/tokio-js-set-interval"
 
 [dependencies]
 tokio = { version = "1.6.0", features = ["time"] }
+lazy_static = "1.4.0"
 
 [dev-dependencies]
 tokio = { version = "1.6.0", features = ["full"] }
