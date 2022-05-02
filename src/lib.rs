@@ -23,7 +23,7 @@ SOFTWARE.
 */
 
 //! The crate `tokio-js-set-interval` allows you to use `setInterval(callback, ms)` and
-//! `setTimeout(callback, ms)` as in Javascript inside a `tokio` runtime (https://tokio.rs/).
+//! `setTimeout(callback, ms)` as in Javascript inside a `tokio` runtime (<https://tokio.rs/>).
 //! For this, it offers the macros `set_interval!(callback, ms)` and `set_timeout!(callback, ms)`.
 //!
 //! ## Restrictions
@@ -48,11 +48,10 @@ SOFTWARE.
 //!  * `tokio` @ 1.6.0 (but should also work with 1.0.0)
 //!  * `rustc` @ 1.52.1 (but should also work with 1.45.2)
 
+use lazy_static::lazy_static;
 use std::collections::HashSet;
 use std::sync::atomic::AtomicU64;
 use std::sync::Mutex;
-
-use lazy_static::lazy_static;
 use tokio::time::Duration;
 
 /// **INTERNAL** Use macro [`set_timeout`] instead!
