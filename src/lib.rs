@@ -70,10 +70,10 @@ pub async fn _set_timeout(f: impl Fn(), ms: u64) {
 
 /// **INTERNAL** Use macro [`set_timeout`] instead!
 ///
-/// Async version of [_set_timeout].
-pub async fn _set_timeout_async<T, F: Future<Output = T>>(f: impl Fn() -> F, ms: u64) {
+/// Async version of [_set_timeout]. Instead of a closure, it consumes a future.
+pub async fn _set_timeout_async<T, F: Future<Output = T>>(f: F, ms: u64) {
     tokio::time::sleep(Duration::from_millis(ms)).await;
-    f().await;
+    f.await;
 }
 
 /// **INTERNAL** Used to manage intervals created by macro [`set_interval`]!
@@ -250,7 +250,11 @@ macro_rules! set_timeout {
     };
 }
 
-/// Async version of [set_timeout].
+/// Async version of [set_timeout]. Instead of a closure, this macro accepts a future.
+///
+/// You can pass:
+/// - an identifier that points a future
+/// - an expression that returns a future
 ///
 /// # Example
 /// ```rust
@@ -274,31 +278,18 @@ macro_rules! set_timeout {
 /// ```
 #[macro_export]
 macro_rules! set_timeout_async {
-    // match for identifier, i.e. a closure, that is behind a variable
-    ($cb:ident, $ms:literal) => {
-        tokio::spawn($crate::_set_timeout_async($cb, $ms));
+    // match for identifier, i.e. a future, that is behind a variable
+    ($future:ident, $ms:literal) => {
+        tokio::spawn($crate::_set_timeout_async($future, $ms));
+    };
+    ($future:expr, $ms:literal) => {
+        tokio::spawn($crate::_set_timeout_async($future, $ms));
+    };
+    ($future:block, $ms:literal) => {
+        tokio::spawn($crate::_set_timeout_async($future, $ms));
     }; /* Async closures not supported currently:
           https://github.com/rust-lang/rust/issues/62290
-       // match for direct closure expression
-       (async || $cb:expr, $ms:literal) => {
-           tokio::spawn($crate::_set_timeout_async(async || $cb, $ms));
-       };
-       // match for direct move closure expression
-       (move async || $cb:expr, $ms:literal) => {
-           tokio::spawn($crate::_set_timeout_async(move async || $cb, $ms));
-       };
-
-
-       /* There are no async expressions, I think
-       // match for expr, like `set_timeout!(println!())`
-       ($cb:expr, $ms:literal) => {
-           $crate::set_timeout_async!(|| $cb, $ms);
-       };*/
-
-       // match for async block
-       (async $cb:block, $ms:literal) => {
-           $crate::set_timeout_async!(async || $cb, $ms);
-       };
+          Thus, the macro just accepts a future. Which is btw a closure itself, somehow.
        */
 }
 
@@ -359,7 +350,13 @@ macro_rules! set_interval {
     };
 }
 
-/// Async version of [set_interval].
+/// Async version of [set_interval]. Instead of a closure, this macro accepts a non-async closure
+/// that produces futures.
+///
+/// You can pass:
+/// - an identifier that points to a function that returns a future
+/// - a block that returns a future
+/// - a closure that returns a future
 ///
 /// # Example
 /// ```rust
@@ -371,10 +368,13 @@ macro_rules! set_interval {
 ///     async fn async_foo() {
 ///         println!("hello1")
 ///     }
+///     let future_producer = || {
+///         async_foo();
+///     };
 ///
-///     set_interval_async!(async_foo, 50);
+///     set_interval_async!(future_producer, 50);
 ///     // If you want to clear the interval later: save the ID
-///     // let id = set_interval_async!(async_foo, 50);
+///     // let id = set_interval_async!(future_producer, 50);
 ///     println!("hello2");
 ///     // prevent that tokios runtime gets dropped too early
 ///     // "hello1" should get printed 2 times (50*2 == 100 < 120)
@@ -383,23 +383,25 @@ macro_rules! set_interval {
 /// ```
 #[macro_export]
 macro_rules! set_interval_async {
-    // match for identifier, i.e. a closure, that is behind a variable
-    ($cb:ident, $ms:literal) => {
-        $crate::_set_interval_spawn_async($cb, $ms)
+    // match for identifier, i.e. a future, that is behind a variable
+    ($future_producer:ident, $ms:literal) => {
+        $crate::_set_interval_spawn_async($future_producer, $ms)
+    };
+    // match for closure that produces futures
+    (|| $cb:expr, $ms:literal) => {
+        $crate::_set_interval_spawn_async(|| $cb, $ms)
+    };
+    // match for move closure that produces futures
+    (move || $cb:block, $ms:literal) => {
+        $crate::_set_interval_spawn_async(move || $cb, $ms)
+    };
+    // match for block expression that produces futures
+    ($cb:block, $ms:literal) => {
+        $crate::set_interval_async!(move || $cb, $ms)
     }; /* Async closures not supported currently:
           https://github.com/rust-lang/rust/issues/62290
-       // match for direct closure expression
-       (|| $cb:expr, $ms:literal) => {
-           $crate::_set_interval_spawn(|| $cb, $ms)
-       };
-       // match for direct move closure expression
-       (move || $cb:expr, $ms:literal) => {
-           $crate::_set_interval_spawn(move || $cb, $ms)
-       };
-       // match for block
-       ($cb:block, $ms:literal) => {
-           $crate::set_interval!(|| $cb, $ms)
-       };*/
+          Thus, the macro just accepts a future. Which is btw a closure itself, somehow.
+       */
 }
 
 #[cfg(test)]
@@ -435,30 +437,63 @@ mod tests {
 
         // macro takes identifiers (which must point to closures)
         async fn async_foo() {
-            println!("hello5");
+            println!("hello1");
         }
-        set_timeout_async!(async_foo, 1);
+        let future = async_foo();
+        // macro takes future by identifier
+        set_timeout_async!(future, 1);
+        // macro takes a expression that returns a future
+        set_timeout_async!(async_foo(), 1);
+        // macro takes block
+        set_timeout_async!(async { println!("hello2") }, 1);
     }
 
     #[tokio::test]
     async fn test_set_interval_macro_all_argument_variants_builds() {
         // macro takes expression
-        set_interval!(println!("hello1"), 4);
+        set_interval!(println!("hello1"), 42);
         // macro takes block
-        set_interval!({ println!("hello2") }, 3);
+        set_interval!({ println!("hello2") }, 42);
         // macro takes direct closure expressions
-        set_interval!(|| println!("hello3"), 2);
+        set_interval!(|| println!("hello3"), 42);
         // macro takes direct move closure expressions
-        set_interval!(move || println!("hello4"), 2);
+        set_interval!(move || println!("hello4"), 42);
         // macro takes identifiers (which must point to closures)
         let closure = || println!("hello5");
-        set_interval!(closure, 1);
+        set_interval!(closure, 42);
 
-        // macro takes identifiers (which must point to closures)
+        // macro takes identifiers (which must point to a future-producing closure)
         async fn async_foo() {
-            println!("hello5");
+            println!("hello1");
         }
-        set_interval_async!(async_foo, 1);
+        set_interval_async!(async_foo, 42);
+        // macro takes block
+        set_interval_async!(
+            {
+                async move {
+                    println!("hello2");
+                }
+            },
+            42
+        );
+        // macro takes a closure that produces a future
+        set_interval_async!(
+            || {
+                async move {
+                    println!("hello3");
+                }
+            },
+            42
+        );
+        // macro takes a move closure that produces a future
+        set_interval_async!(
+            move || {
+                async move {
+                    println!("hello4");
+                }
+            },
+            42
+        );
     }
 
     /// Test can't been automated because the test is correct
@@ -529,20 +564,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_timeout_async() {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        async fn async_foo() {
-            COUNTER.fetch_add(1, Ordering::SeqCst);
-        }
-        {
-            set_timeout_async!(async_foo, 50);
-        }
-        {
-            set_timeout_async!(async_foo, 50);
-        }
+        let counter = Arc::new(AtomicU64::new(0));
+        let counter_closure = counter.clone();
+        let future_producer = move || {
+            let counter_inner = counter_closure.clone();
+            async move {
+                counter_inner.fetch_add(1, Ordering::SeqCst);
+            }
+        };
+
+        set_timeout_async!(future_producer(), 50);
+        set_timeout_async!(future_producer(), 50);
 
         // give the tokio runtime enough execution time
         tokio::time::sleep(Duration::from_millis(110)).await;
-        assert_eq!(COUNTER.load(Ordering::SeqCst), 2);
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
     }
 
     #[tokio::test]
@@ -566,18 +602,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_interval_async() {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        async fn async_foo() {
-            COUNTER.fetch_add(1, Ordering::SeqCst);
-        }
+        let counter = Arc::new(AtomicU64::new(0));
         {
-            // the block is required to change the return type to "()"
-            set_interval_async!(async_foo, 50);
+            let counter_closure = counter.clone();
+            let future_producer = move || {
+                let counter_inner = counter_closure.clone();
+                async move {
+                    counter_inner.fetch_add(1, Ordering::SeqCst);
+                }
+            };
+            set_interval_async!(future_producer, 50);
         }
 
         // give the tokio runtime enough execution time to execute the interval 3 times
         tokio::time::sleep(Duration::from_millis(180)).await;
-        assert_eq!(COUNTER.load(Ordering::SeqCst), 3);
+        assert_eq!(counter.load(Ordering::SeqCst), 3);
     }
 
     #[tokio::test]
