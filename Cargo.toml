@@ -3,7 +3,7 @@ name = "tokio-js-set-interval"
 description = """
 Allows you to use `setInterval(callback, ms)` and
 `setTimeout(callback, ms)` as in Javascript inside a `tokio` runtime.
-For this, it offers the macros `set_interval!(callback, ms)` and `set_timeout!(callback, ms)`.
+The library provides the macros `set_interval!(callback, ms)` and `set_timeout!(callback, ms)`.
 """
 version = "1.2.0"
 edition = "2018"

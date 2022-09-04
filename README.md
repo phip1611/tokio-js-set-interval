@@ -2,7 +2,11 @@
 
 The crate `tokio-js-set-interval` allows you to use `setInterval(callback, ms)` and
 `setTimeout(callback, ms)` as in Javascript inside a **`tokio` runtime (https://tokio.rs/)**.
-For this, it offers the macros `set_interval!(callback, ms)` and `set_timeout!(callback, ms)`.
+The library provides the macros:
+- `set_interval!(callback, ms)`,
+- `set_interval_async!(async_callback, ms)`,
+- `set_timeout!(callback, ms)`,
+- and `set_timeout_async!(async_callback, ms)`.
 
 ## How to use
 **Cargo.toml**
@@ -24,7 +28,7 @@ async fn main() {
     // you can clear intervals if you want
     let id = set_interval!(println!("hello from interval"), 10);
     clear_interval(id);
-    
+
     // give enough time before tokios runtime exits
     tokio::time::sleep(Duration::from_millis(40)).await;
 }
@@ -34,10 +38,10 @@ async fn main() {
 They behave similar to their Javascript counterparts, with a few exceptions:
 
  * They only get executed if the `tokio` runtime lives long enough.
- * on order to compile, the callback must return the union type, i.e. `()`
- * => all actions must be done via side effects
+ * on order to compile, the callback must return the union type, i.e. `()` \
+   => all actions must be done via side effects
  * again, there is **NO GUARANTEE** that the tasks will get executed \
-   (--> but useful/convenient for low priority background tasks and for the learning effect of course)
+   (=> but useful/convenient for low priority background tasks and for the learning effect of course)
 
 ## Trivia
 ⚠ I'm not an expert in `tokio` (or async/await/futures in Rust in general) and I don't
