@@ -267,7 +267,8 @@ macro_rules! set_timeout {
 ///
 /// #[tokio::main]
 /// async fn main() {
-///     set_timeout_async!(async_foo, 0);
+///     let future = async_foo();
+///     set_timeout_async!(future, 0);
 ///     println!("hello2");
 ///     // prevent that tokios runtime gets dropped too early
 ///     // order of output should be
@@ -287,10 +288,7 @@ macro_rules! set_timeout_async {
     };
     ($future:block, $ms:literal) => {
         tokio::spawn($crate::_set_timeout_async($future, $ms));
-    }; /* Async closures not supported currently:
-          https://github.com/rust-lang/rust/issues/62290
-          Thus, the macro just accepts a future. Which is btw a closure itself, somehow.
-       */
+    };
 }
 
 /// Creates a timeout that behaves similar to `setInterval(callback, ms)` in Javascript
@@ -363,14 +361,13 @@ macro_rules! set_interval {
 /// use tokio::time::Duration;
 /// use tokio_js_set_interval::set_interval_async;
 ///
+/// async fn future_producer() {
+///     println!("hello1")
+/// }
+///
 /// #[tokio::main]
 /// async fn main() {
-///     async fn async_foo() {
-///         println!("hello1")
-///     }
-///     let future_producer = || {
-///         async_foo();
-///     };
+///
 ///
 ///     set_interval_async!(future_producer, 50);
 ///     // If you want to clear the interval later: save the ID
@@ -398,10 +395,7 @@ macro_rules! set_interval_async {
     // match for block expression that produces futures
     ($cb:block, $ms:literal) => {
         $crate::set_interval_async!(move || $cb, $ms)
-    }; /* Async closures not supported currently:
-          https://github.com/rust-lang/rust/issues/62290
-          Thus, the macro just accepts a future. Which is btw a closure itself, somehow.
-       */
+    };
 }
 
 #[cfg(test)]
@@ -424,17 +418,10 @@ mod tests {
         // macro takes identifiers (which must point to closures)
         let closure = || println!("hello5");
         set_timeout!(closure, 1);
+    }
 
-        /* Async closures not supported currently:
-           https://github.com/rust-lang/rust/issues/62290
-        // macro takes block.
-        set_timeout_async!(async { println!("hello2") }, 3);
-        // macro takes direct closure expressions
-        set_timeout_async!(async || println!("hello3"), 2);
-        // macro takes direct move closure expressions
-        set_timeout_async!(move async || println!("hello4"), 2);
-        */
-
+    #[tokio::test]
+    async fn test_set_timeout_async_macro_all_argument_variants_builds() {
         // macro takes identifiers (which must point to closures)
         async fn async_foo() {
             println!("hello1");
@@ -461,7 +448,10 @@ mod tests {
         // macro takes identifiers (which must point to closures)
         let closure = || println!("hello5");
         set_interval!(closure, 42);
+    }
 
+    #[tokio::test]
+    async fn test_set_interval_async_macro_all_argument_variants_builds() {
         // macro takes identifiers (which must point to a future-producing closure)
         async fn async_foo() {
             println!("hello1");
@@ -470,7 +460,7 @@ mod tests {
         // macro takes block
         set_interval_async!(
             {
-                async move {
+                async {
                     println!("hello2");
                 }
             },
