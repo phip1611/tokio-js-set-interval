@@ -50,6 +50,7 @@ SOFTWARE.
 
 use lazy_static::lazy_static;
 use std::collections::HashSet;
+use std::future::Future;
 use std::sync::atomic::AtomicU64;
 use std::sync::Mutex;
 use tokio::time::Duration;
@@ -63,6 +64,14 @@ pub async fn _set_timeout(f: impl Fn(), ms: u64) {
     f();
 }
 
+/// **INTERNAL** Use macro [`set_timeout`] instead!
+///
+/// Async version of [_set_timeout].
+pub async fn _set_timeout_async<T, F: Future<Output = T>>(f: impl Fn() -> F, ms: u64) {
+    tokio::time::sleep(Duration::from_millis(ms)).await;
+    f().await;
+}
+
 /// **INTERNAL** Used to manage intervals created by macro [`set_interval`]!
 /// Helps to assign unique IDs to intervals and stop them.
 pub struct IntervalManager {
@@ -73,6 +82,7 @@ pub struct IntervalManager {
 }
 
 lazy_static! {
+    // TODO remove; Mutex::new now const since Rust 1.62 or so
     /// **INTERNAL** Used to manage intervals created by macro [`set_interval`]!
     pub static ref INTERVAL_MANAGER: IntervalManager = IntervalManager {
         counter: AtomicU64::new(0),
@@ -134,7 +144,7 @@ pub fn clear_interval(id: u64) {
 
 /// Creates a timeout that behaves similar to `setTimeout(callback, ms)` in Javascript
 /// for the `tokio` runtime. Unlike in Javascript, it will only be executed, if after the
-/// specified time passed, the `tokio` runtime still lives, i.e. didn't got dropped.
+/// specified time passed, the `tokio` runtime still lives, i.e. didn't get dropped.
 ///
 /// As in Javascript, a timeout may only have side effects and no return type.
 /// You don't get a handle to manually wait for it, you must ensure, that the tokio
@@ -182,6 +192,56 @@ macro_rules! set_timeout {
     // match for block
     ($cb:block, $ms:literal) => {
         $crate::set_timeout!(|| $cb, $ms);
+    };
+}
+
+/// Async version of [set_timeout].
+///
+/// # Example
+/// ```rust
+/// use tokio::time::Duration;
+/// use tokio_js_set_interval::set_timeout_async;
+///
+/// async fn async_foo() {
+///     println!("hello1");
+/// }
+///
+/// #[tokio::main]
+/// async fn main() {
+///     set_timeout_async!(async_foo, 0);
+///     println!("hello2");
+///     // prevent that tokios runtime gets dropped too early
+///     // order of output should be
+///     //  "hello2"
+///     //  "hello1"
+///     tokio::time::sleep(Duration::from_millis(1)).await;
+/// }
+/// ```
+#[macro_export]
+macro_rules! set_timeout_async {
+    // match for identifier, i.e. a closure, that is behind a variable
+    ($cb:ident, $ms:literal) => {
+        tokio::spawn($crate::_set_timeout_async($cb, $ms));
+    }; /* Async closures not supported currently:
+          https://github.com/rust-lang/rust/issues/62290
+       // match for direct closure expression
+       (async || $cb:expr, $ms:literal) => {
+           tokio::spawn($crate::_set_timeout_async(async || $cb, $ms));
+       };
+       // match for direct move closure expression
+       (move async || $cb:expr, $ms:literal) => {
+           tokio::spawn($crate::_set_timeout_async(move async || $cb, $ms));
+       };
+
+
+    /* There are no async expressions, I think
+    // match for expr, like `set_timeout!(println!())`
+    ($cb:expr, $ms:literal) => {
+        $crate::set_timeout_async!(|| $cb, $ms);
+    };*/
+    // match for async block
+    (async $cb:block, $ms:literal) => {
+        $crate::set_timeout_async!(async || $cb, $ms);
     };
 }
 
@@ -262,6 +322,22 @@ mod tests {
         // macro takes identifiers (which must point to closures)
         let closure = || println!("hello5");
         set_timeout!(closure, 1);
+
+        /* Async closures not supported currently:
+           https://github.com/rust-lang/rust/issues/62290
+        // macro takes block.
+        set_timeout_async!(async { println!("hello2") }, 3);
+        // macro takes direct closure expressions
+        set_timeout_async!(async || println!("hello3"), 2);
+        // macro takes direct move closure expressions
+        set_timeout_async!(move async || println!("hello4"), 2);
+        */
+
+        // macro takes identifiers (which must point to closures)
+        async fn async_foo() {
+            println!("hello5");
+        }
+        set_timeout_async!(async_foo, 1);
     }
 
     #[tokio::test]
@@ -343,6 +419,24 @@ mod tests {
         // give the tokio runtime enough execution time
         tokio::time::sleep(Duration::from_millis(110)).await;
         assert_eq!(counter.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn test_set_timeout_async() {
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        async fn async_foo() {
+            COUNTER.fetch_add(1, Ordering::SeqCst);
+        }
+        {
+            set_timeout_async!(async_foo, 50);
+        }
+        {
+            set_timeout_async!(async_foo, 50);
+        }
+
+        // give the tokio runtime enough execution time
+        tokio::time::sleep(Duration::from_millis(110)).await;
+        assert_eq!(COUNTER.load(Ordering::SeqCst), 2);
     }
 
     #[tokio::test]

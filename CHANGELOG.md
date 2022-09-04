@@ -1,3 +1,7 @@
+# 1.2.0 (2022-09-04)
+- Added the `set_timeout_async!` macro. It consumes an identifier that is an async function.
+  Async functions are currently not supported as this required an unstable async closure feature.
+
 # 1.1.1 (2022-05-02)
 - small internal improvements
 
