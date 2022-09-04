@@ -111,10 +111,13 @@ async fn _set_interval(f: impl Fn() + Send + 'static, ms: u64, id: u64) {
     loop {
         int.tick().await;
 
-        // breaks the loop
-        let map = INTERVAL_MANAGER.running_intervals.lock().unwrap();
-        if !map.contains(&id) {
-            break;
+        // - breaks the loop if the interval war cleared.
+        // - dedicated block to drop lock early
+        {
+            let map = INTERVAL_MANAGER.running_intervals.lock().unwrap();
+            if !map.contains(&id) {
+                break;
+            }
         }
 
         f();
