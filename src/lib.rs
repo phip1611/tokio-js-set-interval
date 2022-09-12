@@ -24,35 +24,38 @@ SOFTWARE.
 
 //! The crate `tokio-js-set-interval` allows you to use `setInterval(callback, ms)` and
 //! `setTimeout(callback, ms)` as in Javascript inside a `tokio` runtime (<https://tokio.rs/>).
-//! For this, it offers the macros `set_interval!(callback, ms)` and `set_timeout!(callback, ms)`.
+//! The library provides the macros:
+//! - `set_interval!(callback, ms)`,
+//! - `set_interval_async!(future, ms)`,
+//! - `set_timeout!(callback, ms)`,
+//! - and `set_timeout_async!(async_callback, ms)`.
 //!
 //! ## Restrictions
 //! They behave similar to their Javascript counterparts, with a few exceptions:
 //!
 //!  * They only get executed if the `tokio` runtime lives long enough.
-//!  * on order to compile, the callback must return the union type, i.e. `()`
-//!  * => all actions must be done via side effects
+//!  * on order to compile, the callback must return the union type, i.e. `()` \
+//!    => all actions must be done via side effects
 //!  * ⚠ again, there is **NO GUARANTEE** that the tasks will get executed \
-//!    (--> but useful/convenient for low priority background tasks and for the learning effect of course) ⚠
+//!    (=> however useful and convenient for low priority background tasks and for the learning effect of course) ⚠
 //!
 //! ## Trivia
-//! ⚠ I'm not an expert in `tokio` (or async/await/futures in Rust in general) and I don't
-//!   know if this follows best practises. But it helped me to understand how `tokio` works.
-//!   I hope it may be helpful to some of you too. ⚠
-//!
-//! The functionality itself is really simple. The biggest part are the convenient macros.
-//! I over-engineered them a little to learn more about macros.
+//! The functionality behind is rather simple. However, it took me some time to figure out what kind of
+//! input the macros should accept and how the generic arguments of the functions behind the macros
+//! need to be structured. Especially the `*_async!()` versions of the macros were quite complicated
+//! during the development.
 //!
 //! ## Compatibility
-//! Version 1.0.0 is developed with:
+//! Version 1.2.0 is developed with:
 //!  * `tokio` @ 1.6.0 (but should also work with 1.0.0)
 //!  * `rustc` @ 1.52.1 (but should also work with 1.45.2)
 
 use lazy_static::lazy_static;
 use std::collections::HashSet;
-use std::sync::atomic::AtomicU64;
+use std::future::Future;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
-use tokio::time::Duration;
+use tokio::time::{Duration, Interval};
 
 /// **INTERNAL** Use macro [`set_timeout`] instead!
 ///
@@ -61,6 +64,14 @@ use tokio::time::Duration;
 pub async fn _set_timeout(f: impl Fn(), ms: u64) {
     tokio::time::sleep(Duration::from_millis(ms)).await;
     f();
+}
+
+/// **INTERNAL** Use macro [`set_timeout`] instead!
+///
+/// Async version of [_set_timeout]. Instead of a closure, it consumes a future.
+pub async fn _set_timeout_async<T, F: Future<Output = T>>(f: F, ms: u64) {
+    tokio::time::sleep(Duration::from_millis(ms)).await;
+    f.await;
 }
 
 /// **INTERNAL** Used to manage intervals created by macro [`set_interval`]!
@@ -73,6 +84,7 @@ pub struct IntervalManager {
 }
 
 lazy_static! {
+    // TODO remove; Mutex::new now const since Rust 1.62 or so
     /// **INTERNAL** Used to manage intervals created by macro [`set_interval`]!
     pub static ref INTERVAL_MANAGER: IntervalManager = IntervalManager {
         counter: AtomicU64::new(0),
@@ -80,10 +92,10 @@ lazy_static! {
     };
 }
 
-/// Creates a future that glues the tokio interval function together with
-/// the provided callback. Helper function for [`_set_interval_spawn`].
-async fn _set_interval(f: impl Fn() + Send + 'static, ms: u64, id: u64) {
-    // own scope -> early drop lock
+/// Common code for [_set_interval] and [_set_interval_async]. Adds the new interval to the
+/// interval manager.
+async fn _set_interval_common(ms: u64, id: u64) -> Interval {
+    // dedicated scope -> early drop lock
     {
         let mut map = INTERVAL_MANAGER.running_intervals.lock().unwrap();
         map.insert(id);
@@ -95,19 +107,57 @@ async fn _set_interval(f: impl Fn() + Send + 'static, ms: u64, id: u64) {
     // similar to Javascript in this library, we work around this.
     int.tick().await;
 
+    int
+}
+
+/// Creates a future that glues the tokio interval function together with
+/// the provided callback. Helper function for [`_set_interval_spawn`].
+async fn _set_interval(f: impl Fn() + Send + 'static, ms: u64, id: u64) {
+    let mut int = _set_interval_common(ms, id).await;
+
     // this looks like it runs for ever, but this is not how tokio works
     // at least with tokio 1.6.0 and Rust 1.52 this stops executing
     // when the tokio runtime gets dropped.
     loop {
         int.tick().await;
 
-        // breaks the loop
-        let map = INTERVAL_MANAGER.running_intervals.lock().unwrap();
-        if !map.contains(&id) {
-            break;
+        // - breaks the loop if the interval was cleared.
+        // - dedicated block to drop lock early
+        {
+            let map = INTERVAL_MANAGER.running_intervals.lock().unwrap();
+            if !map.contains(&id) {
+                break;
+            }
         }
 
         f();
+    }
+}
+
+/// Async version of [_set_interval].
+async fn _set_interval_async<T, Func, Fut>(f: Func, ms: u64, id: u64)
+where
+    Func: (Fn() -> Fut) + Send + 'static + Sync,
+    Fut: Future<Output = T> + Send + Sync,
+{
+    let mut int = _set_interval_common(ms, id).await;
+
+    // this looks like it runs for ever, but this is not how tokio works
+    // at least with tokio 1.6.0 and Rust 1.52 this stops executing
+    // when the tokio runtime gets dropped.
+    loop {
+        int.tick().await;
+
+        // - breaks the loop if the interval was cleared.
+        // - dedicated block to drop lock early
+        {
+            let map = INTERVAL_MANAGER.running_intervals.lock().unwrap();
+            if !map.contains(&id) {
+                break;
+            }
+        }
+
+        f().await;
     }
 }
 
@@ -116,10 +166,23 @@ async fn _set_interval(f: impl Fn() + Send + 'static, ms: u64, id: u64) {
 /// Acquires a new ID, creates an interval future and returns the ID. The future gets
 /// dispatched as tokio task.
 pub fn _set_interval_spawn(f: impl Fn() + Send + 'static, ms: u64) -> u64 {
-    let id = INTERVAL_MANAGER
-        .counter
-        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    // assign next ID to interval
+    let id = INTERVAL_MANAGER.counter.fetch_add(1, Ordering::SeqCst);
     tokio::spawn(_set_interval(f, ms, id));
+    id
+}
+
+/// **INTERNAL** Use macro [`set_interval_async`] instead!
+///
+/// Async version of [_set_interval_spawn].
+pub fn _set_interval_spawn_async<T: 'static, Func, Fut>(f: Func, ms: u64) -> u64
+where
+    Func: (Fn() -> Fut) + Send + 'static + Sync,
+    Fut: Future<Output = T> + Send + 'static + Sync,
+{
+    // assign next ID to interval
+    let id = INTERVAL_MANAGER.counter.fetch_add(1, Ordering::SeqCst);
+    tokio::spawn(_set_interval_async(f, ms, id));
     id
 }
 
@@ -134,7 +197,7 @@ pub fn clear_interval(id: u64) {
 
 /// Creates a timeout that behaves similar to `setTimeout(callback, ms)` in Javascript
 /// for the `tokio` runtime. Unlike in Javascript, it will only be executed, if after the
-/// specified time passed, the `tokio` runtime still lives, i.e. didn't got dropped.
+/// specified time passed, the `tokio` runtime still lives, i.e. didn't get dropped.
 ///
 /// As in Javascript, a timeout may only have side effects and no return type.
 /// You don't get a handle to manually wait for it, you must ensure, that the tokio
@@ -185,6 +248,47 @@ macro_rules! set_timeout {
     };
 }
 
+/// Async version of [set_timeout]. Instead of a closure, this macro accepts a future.
+///
+/// You can pass:
+/// - an identifier that points a future
+/// - an expression that returns a future
+///
+/// # Example
+/// ```rust
+/// use tokio::time::Duration;
+/// use tokio_js_set_interval::set_timeout_async;
+///
+/// async fn async_foo() {
+///     println!("hello1");
+/// }
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let future = async_foo();
+///     set_timeout_async!(future, 0);
+///     println!("hello2");
+///     // prevent that tokios runtime gets dropped too early
+///     // order of output should be
+///     //  "hello2"
+///     //  "hello1"
+///     tokio::time::sleep(Duration::from_millis(1)).await;
+/// }
+/// ```
+#[macro_export]
+macro_rules! set_timeout_async {
+    // match for identifier, i.e. a future, that is behind a variable
+    ($future:ident, $ms:literal) => {
+        tokio::spawn($crate::_set_timeout_async($future, $ms));
+    };
+    ($future:expr, $ms:literal) => {
+        tokio::spawn($crate::_set_timeout_async($future, $ms));
+    };
+    ($future:block, $ms:literal) => {
+        tokio::spawn($crate::_set_timeout_async($future, $ms));
+    };
+}
+
 /// Creates a timeout that behaves similar to `setInterval(callback, ms)` in Javascript
 /// for the `tokio` runtime. Unlike in Javascript, it will only be executed, if after the
 /// specified time passed, the `tokio` runtime still lives, i.e. didn't got dropped.
@@ -208,7 +312,7 @@ macro_rules! set_timeout {
 ///
 /// #[tokio::main]
 /// async fn main() {
-///     set_interval!(println!("hello1"), 50);
+///     let interval = set_interval!(println!("hello1"), 50);
 ///     // If you want to clear the interval later: save the ID
 ///     // let id = set_interval!(println!("hello1"), 50);
 ///     println!("hello2");
@@ -234,17 +338,67 @@ macro_rules! set_interval {
     };
     // match for expr, like `set_interval!(println!())`
     ($cb:expr, $ms:literal) => {
-        $crate::set_interval!(|| $cb, $ms);
+        $crate::set_interval!(|| $cb, $ms)
     };
     // match for block
     ($cb:block, $ms:literal) => {
-        $crate::set_interval!(|| $cb, $ms);
+        $crate::set_interval!(|| $cb, $ms)
+    };
+}
+
+/// Async version of [set_interval]. Instead of a closure, this macro accepts a non-async closure
+/// that produces futures.
+///
+/// You can pass:
+/// - an identifier that points to a function that returns a future
+/// - a block that returns a future
+/// - a closure that returns a future
+///
+/// # Example
+/// ```rust
+/// use tokio::time::Duration;
+/// use tokio_js_set_interval::set_interval_async;
+///
+/// async fn future_producer() {
+///     println!("hello1")
+/// }
+///
+/// #[tokio::main]
+/// async fn main() {
+///
+///
+///     set_interval_async!(future_producer, 50);
+///     // If you want to clear the interval later: save the ID
+///     // let id = set_interval_async!(future_producer, 50);
+///     println!("hello2");
+///     // prevent that tokios runtime gets dropped too early
+///     // "hello1" should get printed 2 times (50*2 == 100 < 120)
+///     tokio::time::sleep(Duration::from_millis(120)).await;
+/// }
+/// ```
+#[macro_export]
+macro_rules! set_interval_async {
+    // match for identifier, i.e. a future, that is behind a variable
+    ($future_producer:ident, $ms:literal) => {
+        $crate::_set_interval_spawn_async($future_producer, $ms)
+    };
+    // match for closure that produces futures
+    (|| $cb:expr, $ms:literal) => {
+        $crate::_set_interval_spawn_async(|| $cb, $ms)
+    };
+    // match for move closure that produces futures
+    (move || $cb:block, $ms:literal) => {
+        $crate::_set_interval_spawn_async(move || $cb, $ms)
+    };
+    // match for block expression that produces futures
+    ($cb:block, $ms:literal) => {
+        $crate::set_interval_async!(move || $cb, $ms)
     };
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::atomic::AtomicU64;
     use std::sync::Arc;
 
     use super::*;
@@ -265,18 +419,68 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_set_timeout_async_macro_all_argument_variants_builds() {
+        async fn async_foo() {
+            println!("hello1");
+        }
+        let future = async_foo();
+        // macro takes future by identifier
+        set_timeout_async!(future, 1);
+        // macro takes an expression that returns a future
+        set_timeout_async!(async_foo(), 1);
+        // macro takes block
+        set_timeout_async!(async { println!("hello2") }, 1);
+    }
+
+    #[tokio::test]
     async fn test_set_interval_macro_all_argument_variants_builds() {
         // macro takes expression
-        set_interval!(println!("hello1"), 4);
+        set_interval!(println!("hello1"), 42);
         // macro takes block
-        set_interval!({ println!("hello2") }, 3);
+        set_interval!({ println!("hello2") }, 42);
         // macro takes direct closure expressions
-        set_interval!(|| println!("hello3"), 2);
+        set_interval!(|| println!("hello3"), 42);
         // macro takes direct move closure expressions
-        set_interval!(move || println!("hello4"), 2);
+        set_interval!(move || println!("hello4"), 42);
         // macro takes identifiers (which must point to closures)
         let closure = || println!("hello5");
-        set_interval!(closure, 1);
+        set_interval!(closure, 42);
+    }
+
+    #[tokio::test]
+    async fn test_set_interval_async_macro_all_argument_variants_builds() {
+        async fn async_foo() {
+            println!("hello1");
+        }
+        // macro takes identifier (that must point to a future-producing function)
+        set_interval_async!(async_foo, 42);
+        // macro takes block with async inner block
+        set_interval_async!(
+            {
+                async {
+                    println!("hello2");
+                }
+            },
+            42
+        );
+        // macro takes a closure that produces a future
+        set_interval_async!(
+            || {
+                async {
+                    println!("hello3");
+                }
+            },
+            42
+        );
+        // macro takes a move closure that produces a future
+        set_interval_async!(
+            move || {
+                async move {
+                    println!("hello4");
+                }
+            },
+            42
+        );
     }
 
     /// Test can't been automated because the test is correct
@@ -346,6 +550,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_set_timeout_async() {
+        let counter = Arc::new(AtomicU64::new(0));
+        let counter_closure = counter.clone();
+        let future_producer = move || {
+            let counter_inner = counter_closure.clone();
+            async move {
+                counter_inner.fetch_add(1, Ordering::SeqCst);
+            }
+        };
+
+        set_timeout_async!(future_producer(), 50);
+        set_timeout_async!(future_producer(), 50);
+
+        // give the tokio runtime enough execution time
+        tokio::time::sleep(Duration::from_millis(110)).await;
+        assert_eq!(counter.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
     async fn test_set_interval() {
         let counter = Arc::new(AtomicU64::new(0));
         {
@@ -357,6 +580,25 @@ mod tests {
                 },
                 50
             );
+        }
+
+        // give the tokio runtime enough execution time to execute the interval 3 times
+        tokio::time::sleep(Duration::from_millis(180)).await;
+        assert_eq!(counter.load(Ordering::SeqCst), 3);
+    }
+
+    #[tokio::test]
+    async fn test_set_interval_async() {
+        let counter = Arc::new(AtomicU64::new(0));
+        {
+            let counter_closure = counter.clone();
+            let future_producer = move || {
+                let counter_inner = counter_closure.clone();
+                async move {
+                    counter_inner.fetch_add(1, Ordering::SeqCst);
+                }
+            };
+            set_interval_async!(future_producer, 50);
         }
 
         // give the tokio runtime enough execution time to execute the interval 3 times
