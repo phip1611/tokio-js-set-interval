@@ -4,7 +4,7 @@ The crate `tokio-js-set-interval` allows you to use `setInterval(callback, ms)` 
 `setTimeout(callback, ms)` as in Javascript inside a **`tokio` runtime (https://tokio.rs/)**.
 The library provides the macros:
 - `set_interval!(callback, ms)`,
-- `set_interval_async!(async_callback, ms)`,
+- `set_interval_async!(future, ms)`,
 - `set_timeout!(callback, ms)`,
 - and `set_timeout_async!(async_callback, ms)`.
 
@@ -41,17 +41,19 @@ They behave similar to their Javascript counterparts, with a few exceptions:
  * on order to compile, the callback must return the union type, i.e. `()` \
    => all actions must be done via side effects
  * again, there is **NO GUARANTEE** that the tasks will get executed \
-   (=> but useful/convenient for low priority background tasks and for the learning effect of course)
+   (=> however useful and convenient for low priority background tasks and for the learning effect of course)
 
 ## Trivia
-⚠ I'm not an expert in `tokio` (or async/await/futures in Rust in general) and I don't
-  know if this follows best practises. But it helped me to understand how `tokio` works.
-  I hope it may be helpful to some of you too. ⚠
+I'm not an expert in `tokio` (or async/await/futures in Rust in general) and I don't
+know if this follows best practises. But it helped me to understand how `tokio` works.
+I hope it may be helpful to some of you too.
 
-The functionality itself is really simple. The biggest part are the convenient macros.
-I over-engineered them a little to learn more about macros.
+The functionality behind is rather simple. However, it took me some time to figure out what kind of
+input the macros should accept and how the generic arguments of the functions behind the macros
+need to be structured. Especially the `*_async!()` versions of the macros were quite complicated
+during the development.
 
-## Compatibility
-Version 1.0.0 is developed with:
- * `tokio` @ 1.6.0 (but should also work with 1.0.0)
- * `rustc` @ 1.52.1 (but should also work with 1.45.2)
+## Compatibility & MSRV
+Version 1.2.0 is developed with `tokio@1.21.0` and `rust@1.63.0`. The minimum supported `tokio`
+version is `1.0.x` and the MSRV depends on the `tokio` version. For the latest tokio version,
+the `MSRV` is `1.49.0`.

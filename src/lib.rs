@@ -26,7 +26,7 @@ SOFTWARE.
 //! `setTimeout(callback, ms)` as in Javascript inside a `tokio` runtime (<https://tokio.rs/>).
 //! The library provides the macros:
 //! - `set_interval!(callback, ms)`,
-//! - `set_interval_async!(async_callback, ms)`,
+//! - `set_interval_async!(future, ms)`,
 //! - `set_timeout!(callback, ms)`,
 //! - and `set_timeout_async!(async_callback, ms)`.
 //!
@@ -37,18 +37,16 @@ SOFTWARE.
 //!  * on order to compile, the callback must return the union type, i.e. `()` \
 //!    => all actions must be done via side effects
 //!  * ⚠ again, there is **NO GUARANTEE** that the tasks will get executed \
-//!    (=> but useful/convenient for low priority background tasks and for the learning effect of course) ⚠
+//!    (=> however useful and convenient for low priority background tasks and for the learning effect of course) ⚠
 //!
 //! ## Trivia
-//! ⚠ I'm not an expert in `tokio` (or async/await/futures in Rust in general) and I don't
-//!   know if this follows best practises. But it helped me to understand how `tokio` works.
-//!   I hope it may be helpful to some of you too. ⚠
-//!
-//! The functionality itself is really simple. The biggest part are the convenient macros.
-//! I over-engineered them a little to learn more about macros.
+//! The functionality behind is rather simple. However, it took me some time to figure out what kind of
+//! input the macros should accept and how the generic arguments of the functions behind the macros
+//! need to be structured. Especially the `*_async!()` versions of the macros were quite complicated
+//! during the development.
 //!
 //! ## Compatibility
-//! Version 1.0.0 is developed with:
+//! Version 1.2.0 is developed with:
 //!  * `tokio` @ 1.6.0 (but should also work with 1.0.0)
 //!  * `rustc` @ 1.52.1 (but should also work with 1.45.2)
 
@@ -422,14 +420,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_timeout_async_macro_all_argument_variants_builds() {
-        // macro takes identifiers (which must point to closures)
         async fn async_foo() {
             println!("hello1");
         }
         let future = async_foo();
         // macro takes future by identifier
         set_timeout_async!(future, 1);
-        // macro takes a expression that returns a future
+        // macro takes an expression that returns a future
         set_timeout_async!(async_foo(), 1);
         // macro takes block
         set_timeout_async!(async { println!("hello2") }, 1);
@@ -452,12 +449,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_interval_async_macro_all_argument_variants_builds() {
-        // macro takes identifiers (which must point to a future-producing closure)
         async fn async_foo() {
             println!("hello1");
         }
+        // macro takes identifier (that must point to a future-producing function)
         set_interval_async!(async_foo, 42);
-        // macro takes block
+        // macro takes block with async inner block
         set_interval_async!(
             {
                 async {
@@ -469,7 +466,7 @@ mod tests {
         // macro takes a closure that produces a future
         set_interval_async!(
             || {
-                async move {
+                async {
                     println!("hello3");
                 }
             },

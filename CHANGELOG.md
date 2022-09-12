@@ -1,8 +1,10 @@
-# 1.2.0 (2022-09-04)
+# 1.2.0 (2022-09-12)
 - Added the `set_timeout_async!` macro. It accepts futures either by expression or by identifier.
 - Added the `set_interval_async!` macro. It accepts a function that produces futures by identifier
   or by expression.
+- examples for the new macros can be found in `examples/macro-possible-arguments.rs`
 - small fix in `set_interval!`
+- FYI: MSRV is `1.49.0` (with `tokio @ 1.21.0`). Minimum supported tokio version is still `1.0.x`.
 
 # 1.1.1 (2022-05-02)
 - small internal improvements

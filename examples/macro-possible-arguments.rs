@@ -49,7 +49,7 @@ async fn main() {
     let future = async_foo();
     // macro takes future by identifier
     set_timeout_async!(future, 1);
-    // macro takes a expression that returns a future
+    // macro takes an expression that returns a future
     set_timeout_async!(async_foo(), 1);
     // macro takes block
     set_timeout_async!(async { println!("set_timeout_async 2") }, 1);
@@ -60,12 +60,12 @@ async fn main() {
     // ######################################################################
     // set_interval_async
 
-    // macro takes identifiers (which must point to a future-producing closure)
     async fn async_foo2() {
         println!("set_interval_async 1");
     }
+    // macro takes identifier (that must point to a future-producing function)
     set_interval_async!(async_foo2, 42);
-    // macro takes block
+    // macro takes block with async inner block
     set_interval_async!(
         {
             async {
@@ -77,7 +77,7 @@ async fn main() {
     // macro takes a closure that produces a future
     set_interval_async!(
         || {
-            async move {
+            async {
                 println!("set_interval_async 3");
             }
         },
