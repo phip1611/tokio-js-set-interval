@@ -246,6 +246,27 @@ macro_rules! set_timeout {
     ($cb:block, $ms:literal) => {
         $crate::set_timeout!(|| $cb, $ms);
     };
+
+    // match for identifier, i.e. a closure, that is behind a variable
+    ($cb:ident, $ms:ident) => {
+        tokio::spawn($crate::_set_timeout($cb, $ms));
+    };
+    // match for direct closure expression
+    (|| $cb:expr, $ms:ident) => {
+        tokio::spawn($crate::_set_timeout(|| $cb, $ms));
+    };
+    // match for direct move closure expression
+    (move || $cb:expr, $ms:ident) => {
+        tokio::spawn($crate::_set_timeout(move || $cb, $ms));
+    };
+    // match for expr, like `set_timeout!(println!())`
+    ($cb:expr, $ms:ident) => {
+        $crate::set_timeout!(|| $cb, $ms);
+    };
+    // match for block
+    ($cb:block, $ms:ident) => {
+        $crate::set_timeout!(|| $cb, $ms);
+    };
 }
 
 /// Async version of [set_timeout]. Instead of a closure, this macro accepts a future.
@@ -285,6 +306,16 @@ macro_rules! set_timeout_async {
         tokio::spawn($crate::_set_timeout_async($future, $ms));
     };
     ($future:block, $ms:literal) => {
+        tokio::spawn($crate::_set_timeout_async($future, $ms));
+    };
+
+    ($future:ident, $ms:ident) => {
+        tokio::spawn($crate::_set_timeout_async($future, $ms));
+    };
+    ($future:expr, $ms:ident) => {
+        tokio::spawn($crate::_set_timeout_async($future, $ms));
+    };
+    ($future:block, $ms:ident) => {
         tokio::spawn($crate::_set_timeout_async($future, $ms));
     };
 }
@@ -344,6 +375,28 @@ macro_rules! set_interval {
     ($cb:block, $ms:literal) => {
         $crate::set_interval!(|| $cb, $ms)
     };
+
+    // match for identifier, i.e. a closure, that is behind a variable
+    ($cb:ident, $ms:ident) => {
+        // not so nice, need to wrap the identifier in another closure
+        $crate::set_interval!(move || $cb(), $ms)
+    };
+    // match for direct closure expression
+    (|| $cb:expr, $ms:ident) => {
+        $crate::_set_interval_spawn(|| $cb, $ms)
+    };
+    // match for direct move closure expression
+    (move || $cb:expr, $ms:ident) => {
+        $crate::_set_interval_spawn(move || $cb, $ms)
+    };
+    // match for expr, like `set_interval!(println!())`
+    ($cb:expr, $ms:ident) => {
+        $crate::set_interval!(|| $cb, $ms)
+    };
+    // match for block
+    ($cb:block, $ms:ident) => {
+        $crate::set_interval!(|| $cb, $ms)
+    };
 }
 
 /// Async version of [set_interval]. Instead of a closure, this macro accepts a non-async closure
@@ -394,6 +447,23 @@ macro_rules! set_interval_async {
     ($cb:block, $ms:literal) => {
         $crate::set_interval_async!(move || $cb, $ms)
     };
+
+    // match for identifier, i.e. a future, that is behind a variable
+    ($future_producer:ident, $ms:ident) => {
+        $crate::_set_interval_spawn_async($future_producer, $ms)
+    };
+    // match for closure that produces futures
+    (|| $cb:expr, $ms:ident) => {
+        $crate::_set_interval_spawn_async(|| $cb, $ms)
+    };
+    // match for move closure that produces futures
+    (move || $cb:block, $ms:ident) => {
+        $crate::_set_interval_spawn_async(move || $cb, $ms)
+    };
+    // match for block expression that produces futures
+    ($cb:block, $ms:ident) => {
+        $crate::set_interval_async!(move || $cb, $ms)
+    };
 }
 
 #[cfg(test)]
@@ -403,84 +473,169 @@ mod tests {
 
     use super::*;
 
-    #[tokio::test]
-    async fn test_set_timeout_macro_all_argument_variants_builds() {
-        // macro takes expression
-        set_timeout!(println!("hello1"), 4);
-        // macro takes block
-        set_timeout!({ println!("hello2") }, 3);
-        // macro takes direct closure expressions
-        set_timeout!(|| println!("hello3"), 2);
-        // macro takes direct move closure expressions
-        set_timeout!(move || println!("hello4"), 2);
-        // macro takes identifiers (which must point to closures)
-        let closure = || println!("hello5");
-        set_timeout!(closure, 1);
-    }
+    // Compile-time tests: Macros accept the corresponding kind of parameters
+    mod compile_time_tests {
+        use super::*;
 
-    #[tokio::test]
-    async fn test_set_timeout_async_macro_all_argument_variants_builds() {
-        async fn async_foo() {
-            println!("hello1");
+        #[tokio::test]
+        async fn test_set_timeout_macro_all_argument_variants_builds() {
+            // macro takes expression
+            set_timeout!(println!("hello1"), 4);
+            // macro takes block
+            set_timeout!({ println!("hello2") }, 3);
+            // macro takes direct closure expressions
+            set_timeout!(|| println!("hello3"), 2);
+            // macro takes direct move closure expressions
+            set_timeout!(move || println!("hello4"), 2);
+            // macro takes identifiers (which must point to closures)
+            let closure = || println!("hello5");
+            set_timeout!(closure, 1);
+
+            // now with the period as identifier
+
+            let period = 42;
+
+            // macro takes expression
+            set_timeout!(println!("hello1"), period);
+            // macro takes block
+            set_timeout!({ println!("hello2") }, period);
+            // macro takes direct closure expressions
+            set_timeout!(|| println!("hello3"), period);
+            // macro takes direct move closure expressions
+            set_timeout!(move || println!("hello4"), period);
+            // macro takes identifiers (which must point to closures)
+            let closure = || println!("hello5");
+            set_timeout!(closure, period);
         }
-        let future = async_foo();
-        // macro takes future by identifier
-        set_timeout_async!(future, 1);
-        // macro takes an expression that returns a future
-        set_timeout_async!(async_foo(), 1);
-        // macro takes block
-        set_timeout_async!(async { println!("hello2") }, 1);
-    }
 
-    #[tokio::test]
-    async fn test_set_interval_macro_all_argument_variants_builds() {
-        // macro takes expression
-        set_interval!(println!("hello1"), 42);
-        // macro takes block
-        set_interval!({ println!("hello2") }, 42);
-        // macro takes direct closure expressions
-        set_interval!(|| println!("hello3"), 42);
-        // macro takes direct move closure expressions
-        set_interval!(move || println!("hello4"), 42);
-        // macro takes identifiers (which must point to closures)
-        let closure = || println!("hello5");
-        set_interval!(closure, 42);
-    }
+        #[tokio::test]
+        async fn test_set_timeout_async_macro_all_argument_variants_builds() {
+            async fn async_foo() {
+                println!("hello1");
+            }
 
-    #[tokio::test]
-    async fn test_set_interval_async_macro_all_argument_variants_builds() {
-        async fn async_foo() {
-            println!("hello1");
+            let future = async_foo();
+            // macro takes future by identifier
+            set_timeout_async!(future, 1);
+            // macro takes an expression that returns a future
+            set_timeout_async!(async_foo(), 1);
+            // macro takes block
+            set_timeout_async!(async { println!("hello2") }, 1);
+
+            // now with the period as identifier
+
+            let period = 42;
+
+            let future = async_foo();
+            // macro takes future by identifier
+            set_timeout_async!(future, period);
+            // macro takes an expression that returns a future
+            set_timeout_async!(async_foo(), period);
+            // macro takes block
+            set_timeout_async!(async { println!("hello2") }, period);
         }
-        // macro takes identifier (that must point to a future-producing function)
-        set_interval_async!(async_foo, 42);
-        // macro takes block with async inner block
-        set_interval_async!(
-            {
-                async {
-                    println!("hello2");
-                }
-            },
-            42
-        );
-        // macro takes a closure that produces a future
-        set_interval_async!(
-            || {
-                async {
-                    println!("hello3");
-                }
-            },
-            42
-        );
-        // macro takes a move closure that produces a future
-        set_interval_async!(
-            move || {
-                async move {
-                    println!("hello4");
-                }
-            },
-            42
-        );
+
+        #[tokio::test]
+        async fn test_set_interval_macro_all_argument_variants_builds() {
+            // macro takes expression
+            set_interval!(println!("hello1"), 42);
+            // macro takes block
+            set_interval!({ println!("hello2") }, 42);
+            // macro takes direct closure expressions
+            set_interval!(|| println!("hello3"), 42);
+            // macro takes direct move closure expressions
+            set_interval!(move || println!("hello4"), 42);
+            // macro takes identifiers (which must point to closures)
+            let closure = || println!("hello5");
+            set_interval!(closure, 42);
+
+            // now with the period as identifier
+
+            let period = 42;
+
+            // macro takes expression
+            set_interval!(println!("hello1"), period);
+            // macro takes block
+            set_interval!({ println!("hello2") }, period);
+            // macro takes direct closure expressions
+            set_interval!(|| println!("hello3"), period);
+            // macro takes direct move closure expressions
+            set_interval!(move || println!("hello4"), period);
+            // macro takes identifiers (which must point to closures)
+            let closure = || println!("hello5");
+            set_interval!(closure, period);
+        }
+
+        #[tokio::test]
+        async fn test_set_interval_async_macro_all_argument_variants_builds() {
+            async fn async_foo() {
+                println!("hello1");
+            }
+
+            // macro takes identifier (that must point to a future-producing function)
+            set_interval_async!(async_foo, 42);
+            // macro takes block with async inner block
+            set_interval_async!(
+                {
+                    async {
+                        println!("hello2");
+                    }
+                },
+                42
+            );
+            // macro takes a closure that produces a future
+            set_interval_async!(
+                || {
+                    async {
+                        println!("hello3");
+                    }
+                },
+                42
+            );
+            // macro takes a move closure that produces a future
+            set_interval_async!(
+                move || {
+                    async move {
+                        println!("hello4");
+                    }
+                },
+                42
+            );
+
+            // now with the period as identifier
+
+            let period = 42;
+
+            // macro takes identifier (that must point to a future-producing function)
+            set_interval_async!(async_foo, period);
+            // macro takes block with async inner block
+            set_interval_async!(
+                {
+                    async {
+                        println!("hello2");
+                    }
+                },
+                period
+            );
+            // macro takes a closure that produces a future
+            set_interval_async!(
+                || {
+                    async {
+                        println!("hello3");
+                    }
+                },
+                period
+            );
+            // macro takes a move closure that produces a future
+            set_interval_async!(
+                move || {
+                    async move {
+                        println!("hello4");
+                    }
+                },
+                period
+            );
+        }
     }
 
     /// Test can't been automated because the test is correct
