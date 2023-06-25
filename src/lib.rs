@@ -50,12 +50,13 @@ SOFTWARE.
 //!  * `tokio` @ 1.6.0 (but should also work with 1.0.0)
 //!  * `rustc` @ 1.52.1 (but should also work with 1.45.2)
 
-use lazy_static::lazy_static;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::future::Future;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use tokio::time::{Duration, Interval};
+
+static INTERVAL_MANAGER: IntervalManager = IntervalManager::new();
 
 /// **INTERNAL** Use macro [`set_timeout`] instead!
 ///
@@ -80,16 +81,16 @@ pub struct IntervalManager {
     /// Monotonic incrementing counter from 0 to max value used for interval IDs.
     pub counter: AtomicU64,
     /// Contains only the IDs of dispatched and not cleared intervals.
-    pub running_intervals: Mutex<HashSet<u64>>,
+    pub running_intervals: Mutex<BTreeSet<u64>>,
 }
 
-lazy_static! {
-    // TODO remove; Mutex::new now const since Rust 1.62 or so
-    /// **INTERNAL** Used to manage intervals created by macro [`set_interval`]!
-    pub static ref INTERVAL_MANAGER: IntervalManager = IntervalManager {
-        counter: AtomicU64::new(0),
-        running_intervals: Mutex::new(HashSet::new())
-    };
+impl IntervalManager {
+    const fn new() -> Self {
+        Self {
+            counter: AtomicU64::new(0),
+            running_intervals: Mutex::new(BTreeSet::new()),
+        }
+    }
 }
 
 /// Common code for [_set_interval] and [_set_interval_async]. Adds the new interval to the

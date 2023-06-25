@@ -5,8 +5,8 @@ Allows you to use `setInterval(callback, ms)` and
 `setTimeout(callback, ms)` as in Javascript inside a `tokio` runtime.
 The library provides the macros `set_interval!(callback, ms)` and `set_timeout!(callback, ms)`.
 """
-version = "1.2.1"
-edition = "2018"
+version = "1.3.0"
+edition = "2021"
 authors = ["Philipp Schuster <phip1611@gmail.com>"]
 keywords = ["tokio", "set-interval", "interval", "set-timeout", "timeout"]
 categories = ["asynchronous"]
@@ -15,12 +15,14 @@ license = "MIT"
 homepage = "https://github.com/phip1611/tokio-js-set-interval"
 repository = "https://github.com/phip1611/tokio-js-set-interval"
 documentation = "https://docs.rs/tokio-js-set-interval"
+rust-version = "1.66"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version = "1", features = ["time"] }
-lazy_static = "1.4"
+# Note: Rust >= 1.73 will deny everything under tokio =1.18
+tokio = { version = "1", features = ["rt", "time"] }
 
 [dev-dependencies]
+# Note: Rust >= 1.73 will deny everything under tokio =1.18
 tokio = { version = "1", features = ["full"] }

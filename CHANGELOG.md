@@ -1,3 +1,8 @@
+# 1.3.0 (2023-06-25)
+- MSRV is `1.66`
+- Minimum Tokio version is still `1.0`. Note that Rust `>= 1.73` will deny tokio `<1.18`.
+- Remove dependency to `lazy_static`
+
 # 1.2.1 (2023-06-25)
 - All macros now accept an identifier as parameter for the period. For example:
   ```rust
