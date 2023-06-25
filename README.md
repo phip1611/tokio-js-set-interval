@@ -54,6 +54,5 @@ need to be structured. Especially the `*_async!()` versions of the macros were q
 during the development.
 
 ## Compatibility & MSRV
-Version 1.2.0 is developed with `tokio@1.21.0` and `rust@1.63.0`. The minimum supported `tokio`
-version is `1.0.x` and the MSRV depends on the `tokio` version. For the latest tokio version,
-the `MSRV` is `1.49.0`.
+- MSRV is 1.66
+- Tokio is supported starting with version `1.0`. Note that Rust `>= 1.73` will deny tokio `<1.18`.
