@@ -1,3 +1,10 @@
+# 1.2.1 (2023-06-25)
+- All macros now accept an identifier as parameter for the period. For example:
+  ```rust
+  let period = 5000;
+  set_interval!(println!("hey!"), period);
+  ```
+
 # 1.2.0 (2022-09-12)
 - Added the `set_timeout_async!` macro. It accepts futures either by expression or by identifier.
 - Added the `set_interval_async!` macro. It accepts a function that produces futures by identifier
