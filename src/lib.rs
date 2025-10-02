@@ -329,7 +329,7 @@ macro_rules! set_timeout_async {
 /// You don't get a handle to manually wait for it, you must ensure, that the tokio
 /// runtime lives long enough.
 ///
-/// The macro returns an numeric ID. Similar to Javascript, you can use thie ID to
+/// The macro returns an numeric ID. Similar to Javascript, you can use this ID to
 /// clear/stop intervals with [`clear_interval`].
 ///
 /// # Parameters
