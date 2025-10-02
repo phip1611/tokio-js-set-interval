@@ -52,8 +52,8 @@ SOFTWARE.
 
 use std::collections::BTreeSet;
 use std::future::Future;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::time::{Duration, Interval};
 
 static INTERVAL_MANAGER: IntervalManager = IntervalManager::new();
@@ -206,7 +206,7 @@ pub fn clear_interval(id: u64) {
 ///
 /// # Parameters
 /// * `#1` expression, closure-expression, block or identifier (which points to a closure).
-///        The code that represents the callback function.
+///   The code that represents the callback function.
 /// * `#2` time delay in milliseconds
 ///
 /// # Example
@@ -334,7 +334,7 @@ macro_rules! set_timeout_async {
 ///
 /// # Parameters
 /// * `#1` expression, closure-expression, block or identifier (which points to a closure).
-///        The code that represents the callback function.
+///   The code that represents the callback function.
 /// * `#2` time delay in milliseconds
 ///
 /// # Example
@@ -469,8 +469,8 @@ macro_rules! set_interval_async {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::AtomicU64;
     use std::sync::Arc;
+    use std::sync::atomic::AtomicU64;
 
     use super::*;
 

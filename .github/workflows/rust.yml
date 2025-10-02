@@ -17,22 +17,25 @@ jobs:
         rust:
           - stable
           - nightly
-          - 1.66.0 # MSVR
+          - 1.85.0 # MSVR
     steps:
       - uses: actions/checkout@v5
-      # Important preparation step: override the latest default Rust version in GitHub CI
-      # with the current value of the iteration in the "strategy.matrix.rust"-array.
-      - uses: actions-rs/toolchain@v1
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          profile: default
           toolchain: ${{ matrix.rust }}
-          override: true
+      - uses: Swatinem/rust-cache@v2
       # helps to identify if the right cargo version is actually used
       - run: cargo version
       - name: Build
         run: cargo build --verbose --all-targets
       - name: Run tests
         run: cargo test --verbose
+      - name: Run external example
+        run: |
+          cd external-example
+          cargo run
+          cd -
 
   style_checks:
     runs-on: ubuntu-latest
@@ -42,13 +45,12 @@ jobs:
           - stable
     steps:
       - uses: actions/checkout@v5
-      # Important preparation step: override the latest default Rust version in GitHub CI
-      # with the current value of the iteration in the "strategy.matrix.rust"-array.
-      - uses: actions-rs/toolchain@v1
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          profile: default
-          toolchain: ${{ matrix.rust }}
-          override: true
+          toolchain: stable
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
       # helps to identify if the right cargo version is actually used
       - run: cargo version
       - name: Rustfmt
