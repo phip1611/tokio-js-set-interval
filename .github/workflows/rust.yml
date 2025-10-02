@@ -19,7 +19,7 @@ jobs:
           - nightly
           - 1.66.0 # MSVR
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       # Important preparation step: override the latest default Rust version in GitHub CI
       # with the current value of the iteration in the "strategy.matrix.rust"-array.
       - uses: actions-rs/toolchain@v1
@@ -41,7 +41,7 @@ jobs:
         rust:
           - stable
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v5
       # Important preparation step: override the latest default Rust version in GitHub CI
       # with the current value of the iteration in the "strategy.matrix.rust"-array.
       - uses: actions-rs/toolchain@v1
