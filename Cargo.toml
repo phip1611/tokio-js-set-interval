@@ -6,7 +6,7 @@ Allows you to use `setInterval(callback, ms)` and
 The library provides the macros `set_interval!(callback, ms)` and `set_timeout!(callback, ms)`.
 """
 version = "1.3.0"
-edition = "2021"
+edition = "2024"
 authors = ["Philipp Schuster <phip1611@gmail.com>"]
 keywords = ["tokio", "set-interval", "interval", "set-timeout", "timeout"]
 categories = ["asynchronous"]
@@ -15,7 +15,7 @@ license = "MIT"
 homepage = "https://github.com/phip1611/tokio-js-set-interval"
 repository = "https://github.com/phip1611/tokio-js-set-interval"
 documentation = "https://docs.rs/tokio-js-set-interval"
-rust-version = "1.66"
+rust-version = "1.85"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
